@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import GirisEkrani from '../components/GirisEkrani';
 import SatisEkrani, { type SepetKalemi } from '../components/SatisEkrani';
+import RaporlarEkrani from '../components/RaporlarEkrani';
 import UrunlerEkrani from '../components/UrunlerEkrani';
 import { MAGAZA, RENK, magazaAcikMi, type Kategori, type Urun } from '../constants/optibean';
 import { supabase } from '../lib/supabase';
@@ -127,6 +128,10 @@ export default function AnaSayfa() {
     return <SatisEkrani urunler={urunler} onSatisTamamla={satisKaydet} onGeri={() => setEkran('ana')} />;
   }
 
+  if (ekran === 'raporlar') {
+    return <RaporlarEkrani onGeri={() => setEkran('ana')} />;
+  }
+
   if (ekran === 'urunler') {
     return (
       <UrunlerEkrani
@@ -169,6 +174,8 @@ export default function AnaSayfa() {
               setEkran('satis');
             } else if (modul.baslik === 'Ürünler') {
               setEkran('urunler');
+            } else if (modul.baslik === 'Raporlar') {
+              setEkran('raporlar');
             } else {
               Alert.alert(modul.baslik, 'Bu ekranı yakında birlikte yapacağız.');
             }
@@ -208,7 +215,7 @@ export default function AnaSayfa() {
 const styles = StyleSheet.create({
   ekran: { flex: 1, backgroundColor: RENK.krema },
   ortala: { alignItems: 'center', justifyContent: 'center' },
-  icerik: { padding: 20, paddingTop: 60, paddingBottom: 140 },
+  icerik: { padding: 20, paddingTop: 60, paddingBottom: 60 },
   logo: { width: 170, height: 138, alignSelf: 'flex-start' },
   baslikSatiri: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, marginBottom: 18 },
   altBaslik: { fontSize: 18, fontWeight: '800', color: RENK.murekkepYumusak },

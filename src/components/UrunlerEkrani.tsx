@@ -319,7 +319,7 @@ export default function UrunlerEkrani({ onGeri }: Props) {
 
 const styles = StyleSheet.create({
   ekran: { flex: 1, backgroundColor: RENK.krema },
-  icerik: { padding: 20, paddingTop: 70, paddingBottom: 140 },
+  icerik: { padding: 20, paddingTop: 70, paddingBottom: 60 },
   geri: { color: RENK.murekkepYumusak, fontSize: 16, fontWeight: '700', marginBottom: 8 },
   baslikSatiri: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   baslik: { fontSize: 30, fontWeight: '900', color: RENK.murekkep },

@@ -133,7 +133,7 @@ export default function SatisEkrani({ urunler, onSatisTamamla, onGeri }: Props) 
 
 const styles = StyleSheet.create({
   ekran: { flex: 1, backgroundColor: RENK.krema },
-  icerik: { padding: 20, paddingTop: 70, paddingBottom: 140 },
+  icerik: { padding: 20, paddingTop: 70, paddingBottom: 60 },
   geri: { color: RENK.murekkepYumusak, fontSize: 16, fontWeight: '700', marginBottom: 8 },
   baslik: { fontSize: 30, fontWeight: '900', color: RENK.murekkep, marginBottom: 12 },
   filtreler: { gap: 8, paddingBottom: 14 },
