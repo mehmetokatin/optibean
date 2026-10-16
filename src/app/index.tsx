@@ -15,6 +15,7 @@ import {
 import GirisEkrani from '../components/GirisEkrani';
 import SatisEkrani, { type SepetKalemi } from '../components/SatisEkrani';
 import RaporlarEkrani from '../components/RaporlarEkrani';
+import GiderlerEkrani from '../components/GiderlerEkrani';
 import StokEkrani from '../components/StokEkrani';
 import UrunlerEkrani from '../components/UrunlerEkrani';
 import { MAGAZA, RENK, magazaAcikMi, type Kategori, type Urun } from '../constants/optibean';
@@ -137,6 +138,10 @@ export default function AnaSayfa() {
     return <SatisEkrani urunler={urunler} onSatisTamamla={satisKaydet} onGeri={() => setEkran('ana')} />;
   }
 
+  if (ekran === 'giderler') {
+    return <GiderlerEkrani onGeri={() => setEkran('ana')} />;
+  }
+
   if (ekran === 'stok') {
     return (
       <StokEkrani
@@ -203,6 +208,8 @@ export default function AnaSayfa() {
               setEkran('satis');
             } else if (modul.baslik === 'Ürünler') {
               setEkran('urunler');
+            } else if (modul.baslik === 'Giderler') {
+              setEkran('giderler');
             } else if (modul.baslik === 'Stok') {
               setEkran('stok');
             } else if (modul.baslik === 'Raporlar') {

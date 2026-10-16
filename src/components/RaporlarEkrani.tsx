@@ -51,24 +51,32 @@ type Props = { onGeri: () => void };
 export default function RaporlarEkrani({ onGeri }: Props) {
   const [donem, setDonem] = useState<DonemId>('hafta');
   const [satislar, setSatislar] = useState<SatisSatiri[]>([]);
+  const [giderToplami, setGiderToplami] = useState(0);
   const [yukleniyor, setYukleniyor] = useState(true);
   const [yenileniyor, setYenileniyor] = useState(false);
 
   const gunSayisi = DONEMLER.find((d) => d.id === donem)!.gun;
 
   const yukle = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('satislar')
-      .select('id, tarih_saat, odeme_turu, toplam_tutar, satis_kalemleri(adet, birim_fiyat, urunler(ad, renk, kategori))')
-      .gte('tarih_saat', donemBaslangici(gunSayisi).toISOString())
-      .order('tarih_saat')
-      .limit(5000);
+    const baslangic = donemBaslangici(gunSayisi);
+    // Giderler gün bazında tutuluyor: dönemin ilk günü (İstanbul) ve sonrası
+    const baslangicGunu = istanbulGun(baslangic.toISOString());
+    const [satisCevap, giderCevap] = await Promise.all([
+      supabase
+        .from('satislar')
+        .select('id, tarih_saat, odeme_turu, toplam_tutar, satis_kalemleri(adet, birim_fiyat, urunler(ad, renk, kategori))')
+        .gte('tarih_saat', baslangic.toISOString())
+        .order('tarih_saat')
+        .limit(5000),
+      supabase.from('giderler').select('tutar').gte('tarih', baslangicGunu),
+    ]);
     setYukleniyor(false);
-    if (error) {
+    if (satisCevap.error || giderCevap.error) {
       Alert.alert('Hata', 'Rapor verileri yüklenemedi.');
       return;
     }
-    setSatislar(data as unknown as SatisSatiri[]);
+    setSatislar(satisCevap.data as unknown as SatisSatiri[]);
+    setGiderToplami(giderCevap.data.reduce((t, g) => t + Number(g.tutar), 0));
   }, [gunSayisi]);
 
   useEffect(() => {
@@ -87,6 +95,8 @@ export default function RaporlarEkrani({ onGeri }: Props) {
   const satisSayisi = satislar.length;
   const topSayisi = satislar.reduce((t, s) => t + s.satis_kalemleri.reduce((a, k) => a + k.adet, 0), 0);
   const ortalamaSepet = satisSayisi ? ciro / satisSayisi : 0;
+  const netKar = ciro - giderToplami;
+  const karMarji = ciro > 0 ? Math.round((netKar / ciro) * 100) : 0;
 
   // Günlük ciro (dönemdeki her gün, satış olmasa da 0 ile)
   const gunluk: { etiket: string; deger: number }[] = [];
@@ -153,7 +163,7 @@ export default function RaporlarEkrani({ onGeri }: Props) {
 
       {yukleniyor ? (
         <ActivityIndicator color={RENK.murekkep} style={{ marginTop: 40 }} />
-      ) : satisSayisi === 0 ? (
+      ) : satisSayisi === 0 && giderToplami === 0 ? (
         <View style={styles.kart}>
           <Text style={styles.bos}>Bu dönemde satış yok. Satış girdikçe raporlar burada oluşacak.</Text>
         </View>
@@ -165,6 +175,29 @@ export default function RaporlarEkrani({ onGeri }: Props) {
             <OzetKutu etiket="Satış" deger={String(satisSayisi)} />
             <OzetKutu etiket="Ort. sepet" deger={para(ortalamaSepet)} />
             <OzetKutu etiket="Satılan top" deger={String(topSayisi)} />
+          </View>
+
+          <View style={styles.kart}>
+            <Text style={styles.kartBaslik}>Kâr</Text>
+            <View style={styles.karSatir}>
+              <Text style={styles.karEtiket}>Ciro</Text>
+              <Text style={styles.karDeger}>{para(ciro)}</Text>
+            </View>
+            <View style={styles.karSatir}>
+              <Text style={styles.karEtiket}>Giderler</Text>
+              <Text style={[styles.karDeger, { color: '#B3263E' }]}>− {para(giderToplami)}</Text>
+            </View>
+            <View style={[styles.karSatir, styles.karToplamSatir]}>
+              <Text style={styles.karToplamEtiket}>Net kâr</Text>
+              <Text style={[styles.karToplamDeger, { color: netKar >= 0 ? '#1E7A3C' : '#B3263E' }]}>
+                {netKar < 0 ? '− ' : ''}
+                {para(Math.abs(netKar))}
+              </Text>
+            </View>
+            {ciro > 0 && <Text style={styles.kartAlt}>Kâr marjı: %{karMarji}</Text>}
+            <Text style={styles.karNot}>
+              Kira gibi aylık giderler girildiği güne yazılır. Kısa dönemlerde kâr bu yüzden olduğundan düşük ya da yüksek görünebilir; en doğru tablo “Son 30 gün”de.
+            </Text>
           </View>
 
           {gunSayisi > 1 && (
@@ -315,6 +348,13 @@ const styles = StyleSheet.create({
   ozetKutuKoyu: { backgroundColor: RENK.murekkep },
   ozetEtiket: { fontSize: 13, fontWeight: '700', color: RENK.murekkepYumusak },
   ozetDeger: { fontSize: 24, fontWeight: '900', color: RENK.murekkep, marginTop: 4 },
+  karSatir: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
+  karEtiket: { fontWeight: '700', color: RENK.murekkepYumusak, fontSize: 15 },
+  karDeger: { fontWeight: '800', color: RENK.murekkep, fontSize: 15 },
+  karToplamSatir: { borderTopWidth: 1.5, borderTopColor: RENK.murekkep, paddingTop: 8, marginBottom: 4 },
+  karToplamEtiket: { fontWeight: '900', color: RENK.murekkep, fontSize: 17 },
+  karToplamDeger: { fontWeight: '900', fontSize: 22 },
+  karNot: { fontSize: 12, color: RENK.murekkepYumusak, marginTop: 8, lineHeight: 17 },
   kart: { backgroundColor: RENK.sut, borderRadius: 18, borderWidth: 2, borderColor: RENK.murekkep, padding: 16, marginBottom: 14 },
   kartBaslik: { fontSize: 17, fontWeight: '900', color: RENK.murekkep, marginBottom: 4 },
   kartAlt: { fontSize: 13, fontWeight: '600', color: RENK.murekkepYumusak, marginBottom: 6 },
