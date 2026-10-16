@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import GirisEkrani from '../components/GirisEkrani';
 import SatisEkrani, { type SepetKalemi } from '../components/SatisEkrani';
+import UrunlerEkrani from '../components/UrunlerEkrani';
 import { MAGAZA, RENK, magazaAcikMi, type Kategori, type Urun } from '../constants/optibean';
 import { supabase } from '../lib/supabase';
 
@@ -126,6 +127,17 @@ export default function AnaSayfa() {
     return <SatisEkrani urunler={urunler} onSatisTamamla={satisKaydet} onGeri={() => setEkran('ana')} />;
   }
 
+  if (ekran === 'urunler') {
+    return (
+      <UrunlerEkrani
+        onGeri={() => {
+          setEkran('ana');
+          verileriYukle(); // fiyat değiştiyse satış ekranı güncel listeyi alsın
+        }}
+      />
+    );
+  }
+
   const acik = magazaAcikMi();
 
   return (
@@ -155,6 +167,8 @@ export default function AnaSayfa() {
           onPress={() => {
             if (modul.baslik === 'Satış') {
               setEkran('satis');
+            } else if (modul.baslik === 'Ürünler') {
+              setEkran('urunler');
             } else {
               Alert.alert(modul.baslik, 'Bu ekranı yakında birlikte yapacağız.');
             }
