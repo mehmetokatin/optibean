@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { ActivityIndicator, ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { KATEGORILER, ODEME_TURLERI, RENK, type Kategori, type Urun } from '../constants/optibean';
+import { supabase } from '../lib/supabase';
 
 export type SepetKalemi = { urun: Urun; adet: number };
 
@@ -11,185 +12,282 @@ type Props = {
   onGeri: () => void;
 };
 
+const ODEME_KISA: Record<string, string> = { Nakit: 'Nakit', Kart: 'Kart', 'Trendyol Yemek': 'Trendyol' };
+
+// HIZLI SATIŞ AKIŞI:
+//   lezzetlere dokun (+1)  →  alttaki ödeme butonuna dokun  →  satış kaydedildi.
+//   Uzun basış bir top azaltır. Lezzetler son 30 günde en çok satandan aza sıralı.
 export default function SatisEkrani({ urunler, onSatisTamamla, onGeri }: Props) {
   const [sepet, setSepet] = useState<SepetKalemi[]>([]);
-  const [odemeTuru, setOdemeTuru] = useState(ODEME_TURLERI[0]);
   const [kategori, setKategori] = useState<Kategori | 'hepsi'>('hepsi');
-  const [kaydediliyor, setKaydediliyor] = useState(false);
+  const [populerlik, setPopulerlik] = useState<Record<number, number>>({});
+  const [bildirim, setBildirim] = useState('');
+  const bildirimOpaklik = useRef(new Animated.Value(0)).current;
 
-  const gorunenUrunler = kategori === 'hepsi' ? urunler : urunler.filter((u) => u.kategori === kategori);
+  // Son 30 günde hangi lezzetten kaç top satıldı? (sıralama için)
+  useEffect(() => {
+    const otuzGunOnce = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    supabase
+      .from('satis_kalemleri')
+      .select('urun_id, adet, satislar!inner(tarih_saat)')
+      .gte('satislar.tarih_saat', otuzGunOnce)
+      .limit(10000)
+      .then(({ data }) => {
+        if (!data) return;
+        const sayac: Record<number, number> = {};
+        for (const k of data) sayac[k.urun_id] = (sayac[k.urun_id] ?? 0) + k.adet;
+        setPopulerlik(sayac);
+      });
+  }, []);
+
+  const gorunenUrunler = (kategori === 'hepsi' ? urunler : urunler.filter((u) => u.kategori === kategori))
+    .slice()
+    .sort((a, b) => (populerlik[b.id] ?? 0) - (populerlik[a.id] ?? 0));
+
   const toplam = sepet.reduce((t, k) => t + k.urun.fiyat * k.adet, 0);
   const topSayisi = sepet.reduce((t, k) => t + k.adet, 0);
+  const sepettekiAdet = (id: number) => sepet.find((k) => k.urun.id === id)?.adet ?? 0;
 
   function sepeteEkle(urun: Urun) {
-    const mevcut = sepet.find((k) => k.urun.id === urun.id);
-    if (mevcut) {
-      setSepet(sepet.map((k) => (k.urun.id === urun.id ? { ...k, adet: k.adet + 1 } : k)));
-    } else {
-      setSepet([...sepet, { urun, adet: 1 }]);
-    }
-  }
-
-  function sepettenAzalt(urunId: number) {
-    setSepet(
-      sepet
-        .map((k) => (k.urun.id === urunId ? { ...k, adet: k.adet - 1 } : k))
-        .filter((k) => k.adet > 0)
+    setSepet((s) =>
+      s.some((k) => k.urun.id === urun.id)
+        ? s.map((k) => (k.urun.id === urun.id ? { ...k, adet: k.adet + 1 } : k))
+        : [...s, { urun, adet: 1 }]
     );
   }
 
-  async function satisiTamamla() {
-    if (sepet.length === 0) {
-      Alert.alert('Sepet boş', 'Önce bir lezzet ekle.');
-      return;
-    }
-    setKaydediliyor(true);
-    const basarili = await onSatisTamamla(sepet, odemeTuru);
-    setKaydediliyor(false);
-    if (basarili) {
-      Alert.alert('Satış kaydedildi', `${toplam} ₺ · ${odemeTuru}`);
-      setSepet([]);
+  function sepettenAzalt(urunId: number) {
+    setSepet((s) => s.map((k) => (k.urun.id === urunId ? { ...k, adet: k.adet - 1 } : k)).filter((k) => k.adet > 0));
+  }
+
+  function bildirimGoster(metin: string) {
+    setBildirim(metin);
+    bildirimOpaklik.setValue(1);
+    Animated.timing(bildirimOpaklik, { toValue: 0, duration: 600, delay: 1800, useNativeDriver: true }).start();
+  }
+
+  // Tek dokunuşla tamamla: sepet hemen boşalır, kayıt arka planda yapılır.
+  // Kayıt başarısız olursa sepet geri gelir ve uyarı çıkar, satış kaybolmaz.
+  async function tamamla(odemeTuru: string) {
+    if (sepet.length === 0) return;
+    const kayitliSepet = sepet;
+    const kayitliToplam = toplam;
+    setSepet([]);
+    bildirimGoster(`✓ ${kayitliToplam} ₺ · ${ODEME_KISA[odemeTuru] ?? odemeTuru} kaydedildi`);
+
+    const basarili = await onSatisTamamla(kayitliSepet, odemeTuru);
+    if (!basarili) {
+      setSepet(kayitliSepet);
+      bildirimOpaklik.setValue(0);
     }
   }
 
-  return (
-    <ScrollView style={styles.ekran} contentContainerStyle={styles.icerik}>
-      <Pressable onPress={onGeri}>
-        <Text style={styles.geri}>‹ Ana sayfa</Text>
-      </Pressable>
-      <Text style={styles.baslik}>Yeni Satış</Text>
+  function sepetiTemizle() {
+    if (sepet.length === 0) return;
+    Alert.alert('Sepeti temizle', 'Sepetteki tüm lezzetler silinsin mi?', [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Temizle', style: 'destructive', onPress: () => setSepet([]) },
+    ]);
+  }
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtreler}>
-        {KATEGORILER.map((k) => (
-          <Pressable
-            key={k.id}
-            style={[styles.filtre, kategori === k.id && styles.filtreSecili]}
-            onPress={() => setKategori(k.id)}
-          >
-            <Text style={[styles.filtreMetin, kategori === k.id && styles.filtreMetinSecili]}>{k.ad}</Text>
+  return (
+    <View style={styles.ekran}>
+      {/* Üst kısım: başlık + kategoriler */}
+      <View style={styles.ust}>
+        <View style={styles.ustSatir}>
+          <Pressable onPress={onGeri} hitSlop={10}>
+            <Text style={styles.geri}>‹ Ana sayfa</Text>
           </Pressable>
-        ))}
+          <Text style={styles.baslik}>Satış</Text>
+          <View style={{ width: 80 }} />
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtreler}>
+          {KATEGORILER.map((k) => (
+            <Pressable
+              key={k.id}
+              style={[styles.filtre, kategori === k.id && styles.filtreSecili]}
+              onPress={() => setKategori(k.id)}
+            >
+              <Text style={[styles.filtreMetin, kategori === k.id && styles.filtreMetinSecili]}>{k.ad}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Lezzet ızgarası: 3 sütun */}
+      <ScrollView contentContainerStyle={styles.izgara}>
+        {gorunenUrunler.map((urun) => {
+          const adet = sepettekiAdet(urun.id);
+          return (
+            <Pressable
+              key={urun.id}
+              style={({ pressed }) => [
+                styles.kart,
+                urun.kutu === 0 && styles.kartBitti,
+                adet > 0 && styles.kartSecili,
+                pressed && styles.kartBasili,
+              ]}
+              onPress={() => sepeteEkle(urun)}
+              onLongPress={() => sepettenAzalt(urun.id)}
+              delayLongPress={350}
+            >
+              <View style={[styles.renkSerit, { backgroundColor: urun.renk }]} />
+              <Text style={styles.kartAd} numberOfLines={2}>
+                {urun.ad}
+              </Text>
+              <Text style={styles.kartFiyat}>{urun.kutu === 0 ? 'Kutu bitti' : `${urun.fiyat} ₺`}</Text>
+              {adet > 0 && (
+                <View style={styles.rozet}>
+                  <Text style={styles.rozetMetin}>{adet}</Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
       </ScrollView>
 
-      <View style={styles.urunIzgara}>
-        {gorunenUrunler.map((urun) => (
-          <Pressable key={urun.id} style={styles.urunKarti} onPress={() => sepeteEkle(urun)}>
-            <View style={[styles.top, { backgroundColor: urun.renk }]} />
-            <Text style={styles.urunAd} numberOfLines={2}>
-              {urun.ad}
-            </Text>
-            {urun.not ? <Text style={styles.urunNot}>{urun.not}</Text> : null}
-            <Text style={styles.urunFiyat}>{urun.fiyat} ₺ / top</Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* Kayıt bildirimi */}
+      <Animated.View pointerEvents="none" style={[styles.bildirim, { opacity: bildirimOpaklik }]}>
+        <Text style={styles.bildirimMetin}>{bildirim}</Text>
+      </Animated.View>
 
-      <Text style={styles.bolumBaslik}>Sepet {topSayisi > 0 ? `· ${topSayisi} top` : ''}</Text>
-      {sepet.length === 0 ? (
-        <Text style={styles.bos}>Henüz lezzet eklenmedi</Text>
-      ) : (
-        sepet.map((kalem) => (
-          <View key={kalem.urun.id} style={styles.sepetSatiri}>
-            <View style={[styles.kucukTop, { backgroundColor: kalem.urun.renk }]} />
-            <Text style={styles.sepetUrun}>
-              {kalem.adet} × {kalem.urun.ad}
-            </Text>
-            <Text style={styles.sepetTutar}>{kalem.urun.fiyat * kalem.adet} ₺</Text>
-            <Pressable style={styles.azaltButon} onPress={() => sepettenAzalt(kalem.urun.id)}>
-              <Text style={styles.azaltMetin}>−</Text>
-            </Pressable>
-          </View>
-        ))
-      )}
-
-      <Text style={styles.bolumBaslik}>Ödeme türü</Text>
-      <View style={styles.odemeSatiri}>
-        {ODEME_TURLERI.map((tur) => (
-          <Pressable
-            key={tur}
-            style={[styles.odemeButon, odemeTuru === tur && styles.odemeSecili]}
-            onPress={() => setOdemeTuru(tur)}
-          >
-            <Text style={[styles.odemeMetin, odemeTuru === tur && styles.odemeMetinSecili]}>{tur}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={styles.toplamKutu}>
-        <Text style={styles.toplamEtiket}>Toplam</Text>
-        <Text style={styles.toplamDeger}>{toplam} ₺</Text>
-      </View>
-
-      <Pressable style={styles.tamamlaButon} onPress={satisiTamamla} disabled={kaydediliyor}>
-        {kaydediliyor ? (
-          <ActivityIndicator color={RENK.sut} />
+      {/* Sabit alt panel: sepet özeti + ödeme butonları */}
+      <View style={styles.alt}>
+        {sepet.length === 0 ? (
+          <Text style={styles.ipucu}>Lezzete dokun: +1 top · Uzun bas: −1 top</Text>
         ) : (
-          <Text style={styles.tamamlaMetin}>Satışı Tamamla</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sepetCipler}>
+            {sepet.map((k) => (
+              <Pressable key={k.urun.id} style={styles.cip} onPress={() => sepettenAzalt(k.urun.id)}>
+                <View style={[styles.cipTop, { backgroundColor: k.urun.renk }]} />
+                <Text style={styles.cipMetin}>
+                  {k.adet}× {k.urun.ad}
+                </Text>
+                <Text style={styles.cipEksi}>−</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
         )}
-      </Pressable>
-    </ScrollView>
+
+        <View style={styles.toplamSatir}>
+          <Text style={styles.toplamEtiket}>{topSayisi > 0 ? `${topSayisi} top` : 'Sepet boş'}</Text>
+          <Text style={styles.toplam}>{toplam} ₺</Text>
+          <Pressable onPress={sepetiTemizle} hitSlop={8} disabled={sepet.length === 0}>
+            <Text style={[styles.temizle, sepet.length === 0 && { opacity: 0.3 }]}>Temizle</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.odemeler}>
+          {ODEME_TURLERI.map((tur) => (
+            <Pressable
+              key={tur}
+              style={({ pressed }) => [styles.odeme, sepet.length === 0 && styles.odemePasif, pressed && styles.kartBasili]}
+              onPress={() => tamamla(tur)}
+              disabled={sepet.length === 0}
+            >
+              <Text style={styles.odemeMetin}>{ODEME_KISA[tur] ?? tur}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   ekran: { flex: 1, backgroundColor: RENK.krema },
-  icerik: { padding: 20, paddingTop: 70, paddingBottom: 60 },
-  geri: { color: RENK.murekkepYumusak, fontSize: 16, fontWeight: '700', marginBottom: 8 },
-  baslik: { fontSize: 30, fontWeight: '900', color: RENK.murekkep, marginBottom: 12 },
-  filtreler: { gap: 8, paddingBottom: 14 },
-  filtre: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 2, borderColor: RENK.murekkep, backgroundColor: RENK.sut },
+  ust: { paddingTop: 60, paddingHorizontal: 16 },
+  ustSatir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  geri: { color: RENK.murekkepYumusak, fontSize: 16, fontWeight: '700', width: 80 },
+  baslik: { fontSize: 22, fontWeight: '900', color: RENK.murekkep },
+  filtreler: { gap: 6, paddingBottom: 10 },
+  filtre: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, borderWidth: 2, borderColor: RENK.murekkep, backgroundColor: RENK.sut },
   filtreSecili: { backgroundColor: RENK.murekkep },
-  filtreMetin: { fontWeight: '800', color: RENK.murekkep },
+  filtreMetin: { fontWeight: '800', color: RENK.murekkep, fontSize: 13 },
   filtreMetinSecili: { color: RENK.sut },
-  urunIzgara: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  urunKarti: {
-    width: '48%',
-    backgroundColor: RENK.sut,
-    borderRadius: 18,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: RENK.murekkep,
-  },
-  top: { width: 34, height: 34, borderRadius: 17, borderWidth: 2, borderColor: RENK.murekkep, marginBottom: 8 },
-  urunAd: { fontSize: 15, fontWeight: '800', color: RENK.murekkep },
-  urunNot: { fontSize: 12, color: RENK.murekkepYumusak, marginTop: 2 },
-  urunFiyat: { fontSize: 13, fontWeight: '700', color: RENK.murekkepYumusak, marginTop: 6 },
-  bolumBaslik: { fontSize: 17, fontWeight: '900', color: RENK.murekkep, marginTop: 18, marginBottom: 8 },
-  bos: { color: RENK.murekkepYumusak, fontStyle: 'italic' },
-  sepetSatiri: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  izgara: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 16, gap: 8 },
+  kart: {
+    width: '31.5%',
+    minHeight: 86,
     backgroundColor: RENK.sut,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: RENK.cizgi,
-    padding: 12,
-    marginBottom: 6,
+    borderWidth: 2,
+    borderColor: RENK.murekkep,
+    padding: 8,
+    paddingTop: 12,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
   },
-  kucukTop: { width: 16, height: 16, borderRadius: 8, borderWidth: 1.5, borderColor: RENK.murekkep, marginRight: 10 },
-  sepetUrun: { flex: 1, fontSize: 15, fontWeight: '600', color: RENK.murekkep },
-  sepetTutar: { fontSize: 15, fontWeight: '700', color: RENK.murekkep, marginRight: 12 },
-  azaltButon: { width: 32, height: 32, borderRadius: 16, backgroundColor: RENK.krema, borderWidth: 1.5, borderColor: RENK.murekkep, alignItems: 'center', justifyContent: 'center' },
-  azaltMetin: { fontSize: 20, fontWeight: '700', color: RENK.murekkep },
-  odemeSatiri: { flexDirection: 'row', gap: 8 },
-  odemeButon: { flex: 1, paddingVertical: 12, borderRadius: 14, borderWidth: 2, borderColor: RENK.murekkep, backgroundColor: RENK.sut, alignItems: 'center' },
-  odemeSecili: { backgroundColor: RENK.pembe },
-  odemeMetin: { color: RENK.murekkep, fontWeight: '800', fontSize: 13 },
-  odemeMetinSecili: { color: RENK.murekkep },
-  toplamKutu: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 },
-  toplamEtiket: { fontSize: 18, fontWeight: '700', color: RENK.murekkepYumusak },
-  toplamDeger: { fontSize: 30, fontWeight: '900', color: RENK.murekkep },
-  tamamlaButon: {
+  kartSecili: { backgroundColor: '#FFE3EC' },
+  kartBitti: { opacity: 0.4 },
+  kartBasili: { transform: [{ scale: 0.95 }] },
+  renkSerit: { position: 'absolute', top: 0, left: 0, right: 0, height: 7 },
+  kartAd: { fontSize: 13, fontWeight: '800', color: RENK.murekkep, lineHeight: 16 },
+  kartFiyat: { fontSize: 12, fontWeight: '700', color: RENK.murekkepYumusak, marginTop: 4 },
+  rozet: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: RENK.murekkep,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  rozetMetin: { color: RENK.sut, fontWeight: '900', fontSize: 14 },
+  bildirim: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    bottom: 230,
+    backgroundColor: '#1E7A3C',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  bildirimMetin: { color: RENK.sut, fontWeight: '900', fontSize: 15 },
+  alt: {
+    backgroundColor: RENK.sut,
+    borderTopWidth: 2,
+    borderTopColor: RENK.murekkep,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 30,
+  },
+  ipucu: { color: RENK.murekkepYumusak, fontWeight: '600', fontSize: 13, textAlign: 'center', paddingVertical: 8 },
+  sepetCipler: { gap: 6, paddingVertical: 2 },
+  cip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: RENK.krema,
     borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: RENK.murekkep,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  cipTop: { width: 12, height: 12, borderRadius: 6, borderWidth: 1, borderColor: RENK.murekkep },
+  cipMetin: { fontWeight: '700', color: RENK.murekkep, fontSize: 13 },
+  cipEksi: { fontWeight: '900', color: RENK.murekkepYumusak, fontSize: 15 },
+  toplamSatir: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 10 },
+  toplamEtiket: { fontWeight: '700', color: RENK.murekkepYumusak, fontSize: 14, width: 80 },
+  toplam: { flex: 1, textAlign: 'center', fontSize: 28, fontWeight: '900', color: RENK.murekkep },
+  temizle: { fontWeight: '800', color: '#B3263E', width: 80, textAlign: 'right' },
+  odemeler: { flexDirection: 'row', gap: 8 },
+  odeme: {
+    flex: 1,
+    backgroundColor: RENK.murekkep,
+    borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 16,
     shadowColor: RENK.pembe,
-    shadowOffset: { width: 4, height: 4 },
+    shadowOffset: { width: 3, height: 3 },
     shadowOpacity: 1,
     shadowRadius: 0,
   },
-  tamamlaMetin: { color: RENK.sut, fontSize: 18, fontWeight: '900' },
+  odemePasif: { opacity: 0.3 },
+  odemeMetin: { color: RENK.sut, fontWeight: '900', fontSize: 16 },
 });

@@ -15,6 +15,7 @@ import {
 import GirisEkrani from '../components/GirisEkrani';
 import SatisEkrani, { type SepetKalemi } from '../components/SatisEkrani';
 import RaporlarEkrani from '../components/RaporlarEkrani';
+import StokEkrani from '../components/StokEkrani';
 import UrunlerEkrani from '../components/UrunlerEkrani';
 import { MAGAZA, RENK, magazaAcikMi, type Kategori, type Urun } from '../constants/optibean';
 import { supabase } from '../lib/supabase';
@@ -44,6 +45,7 @@ export default function AnaSayfa() {
   const [bugununCirosu, setBugununCirosu] = useState(0);
   const [satisSayisi, setSatisSayisi] = useState(0);
   const [yenileniyor, setYenileniyor] = useState(false);
+  const [azalanlar, setAzalanlar] = useState<{ ad: string; kutu: number }[]>([]);
 
   // 1) Oturumu takip et: giriş/çıkış olunca ekran kendini günceller.
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function AnaSayfa() {
   // 2) Veritabanından ürünleri ve bugünkü satışları çek.
   const verileriYukle = useCallback(async () => {
     const [urunCevap, satisCevap] = await Promise.all([
-      supabase.from('urunler').select('id, ad, kategori, renk, satis_fiyati, notu').eq('aktif', true).order('id'),
+      supabase.from('urunler').select('id, ad, kategori, renk, satis_fiyati, notu, kutu_sayisi, kritik_kutu').eq('aktif', true).order('id'),
       supabase.from('satislar').select('toplam_tutar').gte('tarih_saat', bugununBaslangici()),
     ]);
 
@@ -75,7 +77,14 @@ export default function AnaSayfa() {
         renk: u.renk ?? '#DDDDDD',
         fiyat: Number(u.satis_fiyati),
         not: u.notu ?? undefined,
+        kutu: u.kutu_sayisi,
       }))
+    );
+    setAzalanlar(
+      urunCevap.data
+        .filter((u) => u.kutu_sayisi <= u.kritik_kutu)
+        .sort((a, b) => a.kutu_sayisi - b.kutu_sayisi)
+        .map((u) => ({ ad: u.ad, kutu: u.kutu_sayisi }))
     );
     setBugununCirosu(satisCevap.data.reduce((t, s) => t + Number(s.toplam_tutar), 0));
     setSatisSayisi(satisCevap.data.length);
@@ -128,6 +137,17 @@ export default function AnaSayfa() {
     return <SatisEkrani urunler={urunler} onSatisTamamla={satisKaydet} onGeri={() => setEkran('ana')} />;
   }
 
+  if (ekran === 'stok') {
+    return (
+      <StokEkrani
+        onGeri={() => {
+          setEkran('ana');
+          verileriYukle();
+        }}
+      />
+    );
+  }
+
   if (ekran === 'raporlar') {
     return <RaporlarEkrani onGeri={() => setEkran('ana')} />;
   }
@@ -165,6 +185,15 @@ export default function AnaSayfa() {
         <Text style={styles.ozetEtiket}>{satisSayisi} satış</Text>
       </View>
 
+      {azalanlar.length > 0 && (
+        <Pressable style={styles.uyari} onPress={() => setEkran('stok')}>
+          <Text style={styles.uyariBaslik}>⚠ {azalanlar.length} lezzet azaldı</Text>
+          <Text style={styles.uyariMetin} numberOfLines={3}>
+            {azalanlar.map((a) => `${a.ad} (${a.kutu} kutu)`).join(', ')}
+          </Text>
+        </Pressable>
+      )}
+
       {moduller.map((modul) => (
         <Pressable
           key={modul.baslik}
@@ -174,6 +203,8 @@ export default function AnaSayfa() {
               setEkran('satis');
             } else if (modul.baslik === 'Ürünler') {
               setEkran('urunler');
+            } else if (modul.baslik === 'Stok') {
+              setEkran('stok');
             } else if (modul.baslik === 'Raporlar') {
               setEkran('raporlar');
             } else {
@@ -233,6 +264,9 @@ const styles = StyleSheet.create({
   },
   ozetEtiket: { color: '#E8E4E3', fontSize: 14, fontWeight: '600' },
   ozetDeger: { color: RENK.sut, fontSize: 38, fontWeight: '900', marginVertical: 6 },
+  uyari: { backgroundColor: '#FCE4E4', borderWidth: 2, borderColor: '#B3263E', borderRadius: 18, padding: 14, marginBottom: 14 },
+  uyariBaslik: { fontWeight: '900', color: '#B3263E', fontSize: 16 },
+  uyariMetin: { color: '#7A1A2B', fontWeight: '600', marginTop: 4, lineHeight: 20 },
   modulKarti: {
     backgroundColor: RENK.sut,
     borderRadius: 18,

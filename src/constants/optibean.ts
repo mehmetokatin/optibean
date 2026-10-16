@@ -33,7 +33,10 @@ export const KATEGORILER: { id: Kategori | 'hepsi'; ad: string }[] = [
 ];
 
 // Lezzetler ve fiyatları artık Supabase'deki `urunler` tablosunda duruyor.
-export type Urun = { id: number; ad: string; kategori: Kategori; renk: string; fiyat: number; not?: string };
+export type Urun = { id: number; ad: string; kategori: Kategori; renk: string; fiyat: number; not?: string; kutu?: number };
+
+// Dondurmalar 6 kg'lık kutularda hazırlanıyor
+export const KUTU_KG = 6;
 
 export const ODEME_TURLERI = ['Nakit', 'Kart', 'Trendyol Yemek'];
 
