@@ -1,56 +1,219 @@
-# Welcome to your Expo app 👋
+<p align="center">
+  <img src="assets/images/optibean-logo.png" alt="OptiBean" width="220">
+</p>
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+<h1 align="center">OptiBean Yönetim Uygulaması</h1>
 
-## Get started
+<p align="center">
+  İstanbul Çekmeköy'deki dondurma mağazam <b>OptiBean</b> için geliştirdiğim, mağazada her gün kullandığım mobil işletme yönetim sistemi.
+</p>
 
-1. Install dependencies
+<p align="center">
+  <img src="https://img.shields.io/badge/React%20Native-Expo-000020?logo=expo" alt="Expo">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/PostgreSQL-Supabase-3ECF8E?logo=supabase&logoColor=white" alt="Supabase">
+  <img src="https://img.shields.io/badge/platform-iOS-lightgrey?logo=apple" alt="iOS">
+</p>
 
-   ```bash
-   npm install
-   ```
+---
 
-2. Start the app
+## Problem
 
-   ```bash
-   npx expo start
-   ```
+Mağazada satışlar bir deftere yalnızca **gün sonu toplamı** olarak yazılıyordu. Bu yüzden şu sorulara cevap verilemiyordu:
 
-In the output, you'll find options to open the app in a
+- Hangi lezzet ne kadar satıyor, hangisi menüden çıkmalı?
+- Günün hangi saatleri yoğun?
+- Nakit, kart ve Trendyol Yemek satışlarının payı ne?
+- Ay sonunda giderler düşüldükten sonra gerçekte ne kadar kâr kalıyor?
+- Hangi lezzetin kutusu bitmek üzere, ne zaman üretim yapılmalı?
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Çözüm
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Kağıt üzerindeki süreci dijitale taşıyan, tek kullanıcılı bir mobil uygulama. Her satış tek tek kayda giriyor; raporlar, stok uyarıları ve kâr hesabı bu ayrıntılı veriden otomatik üretiliyor.
 
-## Get a fresh project
+## Ekran görüntüleri
 
-When you're ready, run:
+| Ana ekran | Satış | Raporlar |
+|:---:|:---:|:---:|
+| <img src="docs/ekranlar/ana-ekran.png" width="230"> | <img src="docs/ekranlar/satis.png" width="230"> | <img src="docs/ekranlar/raporlar.png" width="230"> |
 
-```bash
-npm run reset-project
+| Stok | Giderler | Giriş |
+|:---:|:---:|:---:|
+| <img src="docs/ekranlar/stok.png" width="230"> | <img src="docs/ekranlar/giderler.png" width="230"> | <img src="docs/ekranlar/giris.png" width="230"> |
+
+## Özellikler
+
+**Satış (kasa ekranı)**
+- İki dokunuşla satış: lezzetlere dokun, ödeme türüne dokun
+- Lezzetler son 30 günün satışına göre sıralanır; en çok satanlar hep en üstte
+- Kayıt arka planda yapılır; bağlantı koparsa sepet geri gelir, satış kaybolmaz
+
+**Raporlar**
+- Bugün / son 7 gün / son 30 gün için ciro, satış sayısı, ortalama sepet
+- Günlük ciro grafiği, saatlere göre yoğunluk, en çok satan 10 lezzet
+- Ödeme türü ve kategori dağılımı
+- **Net kâr** ve kâr marjı (ciro − giderler)
+
+**Kutu bazlı stok**
+- Dondurmalar 6 kg'lık kutularda üretiliyor; stok lezzet başına kutu olarak tutulur
+- Toplu üretim girişi (örn. 100 kg sütten hangi lezzetten kaç kutu çıktı)
+- Kutu bitince tek dokunuşla düşüm, sayım düzeltmesi
+- Kritik seviyenin altına düşen lezzetler için ana ekranda uyarı
+
+**Giderler ve ürünler**
+- Kategorili gider kaydı, aylık toplam ve dağılım
+- Fiyat güncelleme, kategoriye toplu fiyat, lezzeti pasife alma
+
+## Teknik mimari
+
+```mermaid
+flowchart LR
+  A["iPhone<br/>React Native (Expo)"] -- "supabase-js<br/>HTTPS + JWT" --> B["Supabase Auth"]
+  A -- "REST / RPC" --> C[("PostgreSQL<br/>Row Level Security")]
+  C --- D["satis_kaydet()<br/>uretim_kaydet()<br/>kutu_degistir()"]
+  E["EAS Update"] -. "kod güncellemeleri" .-> A
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+| Katman | Teknoloji |
+|---|---|
+| Mobil uygulama | React Native, Expo SDK 57, Expo Router, TypeScript |
+| Veritabanı | PostgreSQL (Supabase) |
+| Kimlik doğrulama | Supabase Auth (e-posta/şifre, kayıt kapalı) |
+| Dağıtım | EAS Update |
+| Sürüm kontrolü | Git, GitHub |
 
-### Other setup steps
+## Veritabanı tasarımı
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+```mermaid
+erDiagram
+  URUNLER ||--o{ SATIS_KALEMLERI : "satılır"
+  SATISLAR ||--|{ SATIS_KALEMLERI : "içerir"
+  URUNLER ||--o{ KUTU_HAREKETLERI : "stok değişir"
+  URETIMLER ||--o{ KUTU_HAREKETLERI : "üretir"
+  URUNLER ||--o{ RECETELER : "kullanır"
+  MALZEMELER ||--o{ RECETELER : "gerekir"
+  MALZEMELER ||--o{ STOK_HAREKETLERI : "değişir"
 
-## Learn more
+  URUNLER {
+    bigint id PK
+    text ad
+    text kategori
+    numeric satis_fiyati
+    int kutu_sayisi
+    int kritik_kutu
+    bool aktif
+  }
+  SATISLAR {
+    bigint id PK
+    timestamptz tarih_saat
+    text odeme_turu
+    numeric toplam_tutar
+  }
+  SATIS_KALEMLERI {
+    bigint id PK
+    bigint satis_id FK
+    bigint urun_id FK
+    int adet
+    numeric birim_fiyat
+  }
+  URETIMLER {
+    bigint id PK
+    timestamptz tarih
+    numeric sut_kg
+  }
+  KUTU_HAREKETLERI {
+    bigint id PK
+    bigint urun_id FK
+    text tur
+    int miktar
+    bigint uretim_id FK
+  }
+  GIDERLER {
+    bigint id PK
+    date tarih
+    text kategori
+    numeric tutar
+  }
+  MALZEMELER {
+    bigint id PK
+    text ad
+    numeric stok_miktari
+  }
+  RECETELER {
+    bigint urun_id FK
+    bigint malzeme_id FK
+    numeric miktar
+  }
+  STOK_HAREKETLERI {
+    bigint id PK
+    bigint malzeme_id FK
+    text tur
+    numeric miktar
+  }
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+### Tasarım kararları
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+- **Satış ve satış kalemleri ayrı tablolar (normalizasyon).** Bir satış birden fazla lezzet içerebilir; fişe ait bilgiler (tarih, ödeme türü) her satırda tekrar edilmez.
+- **Satış anındaki fiyat kalemde saklanır (`birim_fiyat`).** Fiyat güncellendiğinde geçmiş satışların tutarı ve raporlar değişmez.
+- **Stok bir sayı değil, hareket kaydı.** Üretim, kutu bitişi ve sayım düzeltmeleri ayrı satırlar olarak tutulur; stok geçmişi ve tüketim hızı bu kayıtlardan çıkarılabilir.
+- **İşlemler (transaction) veritabanı fonksiyonlarında.** `satis_kaydet()` fiş, kalemler ve stok düşümünü tek işlemde yapar; biri başarısız olursa hiçbiri kaydedilmez. Fiyatlar istemciden değil veritabanından alınır.
+- **Kısıtlar veritabanında.** `CHECK` kısıtları negatif stoğu, geçersiz ödeme türünü ve sıfır adetli kalemi engeller.
 
-## Join the community
+## Güvenlik
 
-Join our community of developers creating universal apps.
+- Tüm tablolarda **Row Level Security** açık; veriye yalnızca giriş yapmış kullanıcı erişebilir.
+- Yeni kullanıcı kaydı kapalı; sistemin tek kullanıcısı mağaza sahibi.
+- Uygulamadaki Supabase anahtarı, istemcide kullanılmak üzere tasarlanmış *publishable* anahtardır. Tek başına veri erişimi sağlamaz.
+- Veritabanı fonksiyonlarını çalıştırma yetkisi anonim kullanıcılardan alınmıştır.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Proje yapısı
+
+```
+src/
+├── app/
+│   ├── _layout.tsx        # Kök düzen
+│   └── index.tsx          # Oturum kontrolü, ana ekran, ekranlar arası geçiş
+├── components/
+│   ├── GirisEkrani.tsx
+│   ├── SatisEkrani.tsx
+│   ├── UrunlerEkrani.tsx
+│   ├── StokEkrani.tsx
+│   ├── GiderlerEkrani.tsx
+│   └── RaporlarEkrani.tsx
+├── constants/
+│   ├── optibean.ts        # Mağaza bilgileri, marka renkleri, kategoriler
+│   └── supabaseAyar.ts    # Supabase bağlantı bilgileri
+└── lib/
+    └── supabase.ts        # Supabase istemcisi
+supabase/
+├── schema.sql             # Tablolar, fonksiyonlar, RLS, başlangıç verisi
+└── 002_kutu_stok.sql      # Kutu bazlı stok
+```
+
+## Kurulum
+
+```bash
+git clone https://github.com/mehmetokatin/optibean-app.git
+cd optibean-app
+npm install
+```
+
+1. [Supabase](https://supabase.com)'de bir proje oluşturun; SQL Editor'de sırasıyla `supabase/schema.sql` ve `supabase/002_kutu_stok.sql` dosyalarını çalıştırın.
+2. Authentication bölümünden bir kullanıcı oluşturun ve yeni kayıtları kapatın.
+3. `src/constants/supabaseAyar.ts` dosyasına kendi proje URL'nizi ve publishable anahtarınızı yazın.
+4. `npx expo start` ile başlatın, iPhone'daki Expo Go ile QR kodu okutun.
+
+## Yol haritası
+
+- [ ] Trendyol Yemek komisyonunun otomatik hesaplanması
+- [ ] Haftalık kutu tüketimine göre üretim önerisi
+- [ ] Aylık rapor özetinin PDF olarak dışa aktarımı
+- [ ] App Store / TestFlight dağıtımı
+
+---
+
+<p align="center">
+  <b>Mehmet</b> (<a href="https://github.com/mehmetokatin">@mehmetokatin</a>) · Yeditepe Üniversitesi, Yönetim Bilişim Sistemleri<br>
+  <a href="https://instagram.com/optibean.ice">@optibean.ice</a>
+</p>
