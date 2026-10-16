@@ -1,18 +1,23 @@
 import { useState } from 'react';
-import { ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
-import { KATEGORILER, ODEME_TURLERI, RENK, URUNLER, type Kategori, type Urun } from '../constants/optibean';
+import { ActivityIndicator, ScrollView, View, Text, StyleSheet, Pressable, Alert } from 'react-native';
+import { KATEGORILER, ODEME_TURLERI, RENK, type Kategori, type Urun } from '../constants/optibean';
 
 export type SepetKalemi = { urun: Urun; adet: number };
-export type Satis = { id: number; tarih: Date; kalemler: SepetKalemi[]; toplam: number; odemeTuru: string };
 
-type Props = { onSatisTamamla: (satis: Satis) => void; onGeri: () => void };
+type Props = {
+  urunler: Urun[];
+  // Satışı veritabanına kaydeder; başarılıysa true döner.
+  onSatisTamamla: (kalemler: SepetKalemi[], odemeTuru: string) => Promise<boolean>;
+  onGeri: () => void;
+};
 
-export default function SatisEkrani({ onSatisTamamla, onGeri }: Props) {
+export default function SatisEkrani({ urunler, onSatisTamamla, onGeri }: Props) {
   const [sepet, setSepet] = useState<SepetKalemi[]>([]);
   const [odemeTuru, setOdemeTuru] = useState(ODEME_TURLERI[0]);
   const [kategori, setKategori] = useState<Kategori | 'hepsi'>('hepsi');
+  const [kaydediliyor, setKaydediliyor] = useState(false);
 
-  const gorunenUrunler = kategori === 'hepsi' ? URUNLER : URUNLER.filter((u) => u.kategori === kategori);
+  const gorunenUrunler = kategori === 'hepsi' ? urunler : urunler.filter((u) => u.kategori === kategori);
   const toplam = sepet.reduce((t, k) => t + k.urun.fiyat * k.adet, 0);
   const topSayisi = sepet.reduce((t, k) => t + k.adet, 0);
 
@@ -33,14 +38,18 @@ export default function SatisEkrani({ onSatisTamamla, onGeri }: Props) {
     );
   }
 
-  function satisiTamamla() {
+  async function satisiTamamla() {
     if (sepet.length === 0) {
       Alert.alert('Sepet boş', 'Önce bir lezzet ekle.');
       return;
     }
-    onSatisTamamla({ id: Date.now(), tarih: new Date(), kalemler: sepet, toplam, odemeTuru });
-    Alert.alert('Satış kaydedildi', `${toplam} ₺ · ${odemeTuru}`);
-    setSepet([]);
+    setKaydediliyor(true);
+    const basarili = await onSatisTamamla(sepet, odemeTuru);
+    setKaydediliyor(false);
+    if (basarili) {
+      Alert.alert('Satış kaydedildi', `${toplam} ₺ · ${odemeTuru}`);
+      setSepet([]);
+    }
   }
 
   return (
@@ -111,8 +120,12 @@ export default function SatisEkrani({ onSatisTamamla, onGeri }: Props) {
         <Text style={styles.toplamDeger}>{toplam} ₺</Text>
       </View>
 
-      <Pressable style={styles.tamamlaButon} onPress={satisiTamamla}>
-        <Text style={styles.tamamlaMetin}>Satışı Tamamla</Text>
+      <Pressable style={styles.tamamlaButon} onPress={satisiTamamla} disabled={kaydediliyor}>
+        {kaydediliyor ? (
+          <ActivityIndicator color={RENK.sut} />
+        ) : (
+          <Text style={styles.tamamlaMetin}>Satışı Tamamla</Text>
+        )}
       </Pressable>
     </ScrollView>
   );
