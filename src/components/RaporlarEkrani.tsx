@@ -94,7 +94,6 @@ export default function RaporlarEkrani({ onGeri }: Props) {
   const ciro = satislar.reduce((t, s) => t + Number(s.toplam_tutar), 0);
   const satisSayisi = satislar.length;
   const topSayisi = satislar.reduce((t, s) => t + s.satis_kalemleri.reduce((a, k) => a + k.adet, 0), 0);
-  const ortalamaSepet = satisSayisi ? ciro / satisSayisi : 0;
   const netKar = ciro - giderToplami;
   const karMarji = ciro > 0 ? Math.round((netKar / ciro) * 100) : 0;
 
@@ -172,9 +171,9 @@ export default function RaporlarEkrani({ onGeri }: Props) {
           {/* Özet kutuları */}
           <View style={styles.ozetIzgara}>
             <OzetKutu etiket="Ciro" deger={para(ciro)} koyu />
-            <OzetKutu etiket="Satış" deger={String(satisSayisi)} />
-            <OzetKutu etiket="Ort. sepet" deger={para(ortalamaSepet)} />
-            <OzetKutu etiket="Satılan top" deger={String(topSayisi)} />
+            <OzetKutu etiket="Günlük ortalama" deger={para(ciro / gunSayisi)} />
+            <OzetKutu etiket="Giderler" deger={para(giderToplami)} />
+            <OzetKutu etiket="Net kâr" deger={para(netKar)} />
           </View>
 
           <View style={styles.kart}>
@@ -208,13 +207,14 @@ export default function RaporlarEkrani({ onGeri }: Props) {
           )}
 
           <View style={styles.kart}>
-            <Text style={styles.kartBaslik}>Saatlere göre satış sayısı</Text>
+            <Text style={styles.kartBaslik}>Saatlere göre kayıt sayısı</Text>
             <Text style={styles.kartAlt}>
               En yoğun saat: {enYogunSaat.deger > 0 ? `${enYogunSaat.etiket}.00 – ${Number(enYogunSaat.etiket) + 1}.00` : '-'}
             </Text>
             <SutunGrafik veri={saatlik} renk={RENK.pembe} etiketAraligi={2} degerGoster />
           </View>
 
+          {lezzetler.length > 0 && (
           <View style={styles.kart}>
             <Text style={styles.kartBaslik}>En çok satan lezzetler</Text>
             {lezzetler.map((l, i) => (
@@ -235,6 +235,7 @@ export default function RaporlarEkrani({ onGeri }: Props) {
               </View>
             ))}
           </View>
+          )}
 
           <View style={styles.kart}>
             <Text style={styles.kartBaslik}>Ödeme türleri</Text>
@@ -256,6 +257,7 @@ export default function RaporlarEkrani({ onGeri }: Props) {
             ))}
           </View>
 
+          {kategoriler.length > 0 && (
           <View style={styles.kart}>
             <Text style={styles.kartBaslik}>Kategorilere göre ciro</Text>
             {kategoriler.map((k) => (
@@ -268,6 +270,7 @@ export default function RaporlarEkrani({ onGeri }: Props) {
               </View>
             ))}
           </View>
+          )}
         </>
       )}
     </ScrollView>
@@ -334,7 +337,7 @@ function SutunGrafik({
 }
 
 const styles = StyleSheet.create({
-  ekran: { flex: 1, backgroundColor: RENK.krema },
+  ekran: { flex: 1, backgroundColor: 'transparent' },
   icerik: { padding: 20, paddingTop: 70, paddingBottom: 80 },
   geri: { color: RENK.murekkepYumusak, fontSize: 16, fontWeight: '700', marginBottom: 8 },
   baslik: { fontSize: 30, fontWeight: '900', color: RENK.murekkep, marginBottom: 12 },

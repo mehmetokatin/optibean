@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import GirisEkrani from '../components/GirisEkrani';
 import SatisEkrani, { type SepetKalemi } from '../components/SatisEkrani';
+import TutarSatisEkrani from '../components/TutarSatisEkrani';
+import AyarlarEkrani from '../components/AyarlarEkrani';
 import RaporlarEkrani from '../components/RaporlarEkrani';
 import GiderlerEkrani from '../components/GiderlerEkrani';
 import StokEkrani from '../components/StokEkrani';
@@ -22,7 +24,7 @@ import { MAGAZA, RENK, magazaAcikMi, type Kategori, type Urun } from '../constan
 import { supabase } from '../lib/supabase';
 
 const moduller = [
-  { baslik: 'Satış', aciklama: 'Yeni satış gir' },
+  { baslik: 'Satış', aciklama: 'Nakit, kart ve Trendyol tutarı gir' },
   { baslik: 'Ürünler', aciklama: 'Menü ve fiyatlar' },
   { baslik: 'Stok', aciklama: 'Malzeme takibi' },
   { baslik: 'Giderler', aciklama: 'Kira, fatura, alımlar' },
@@ -44,7 +46,7 @@ export default function AnaSayfa() {
   const [ekran, setEkran] = useState('ana');
   const [urunler, setUrunler] = useState<Urun[]>([]);
   const [bugununCirosu, setBugununCirosu] = useState(0);
-  const [satisSayisi, setSatisSayisi] = useState(0);
+  const [odemeDagilimi, setOdemeDagilimi] = useState<Record<string, number>>({});
   const [yenileniyor, setYenileniyor] = useState(false);
   const [azalanlar, setAzalanlar] = useState<{ ad: string; kutu: number }[]>([]);
 
@@ -62,7 +64,7 @@ export default function AnaSayfa() {
   const verileriYukle = useCallback(async () => {
     const [urunCevap, satisCevap] = await Promise.all([
       supabase.from('urunler').select('id, ad, kategori, renk, satis_fiyati, notu, kutu_sayisi, kritik_kutu').eq('aktif', true).order('id'),
-      supabase.from('satislar').select('toplam_tutar').gte('tarih_saat', bugununBaslangici()),
+      supabase.from('satislar').select('toplam_tutar, odeme_turu').gte('tarih_saat', bugununBaslangici()),
     ]);
 
     if (urunCevap.error || satisCevap.error) {
@@ -88,7 +90,9 @@ export default function AnaSayfa() {
         .map((u) => ({ ad: u.ad, kutu: u.kutu_sayisi }))
     );
     setBugununCirosu(satisCevap.data.reduce((t, s) => t + Number(s.toplam_tutar), 0));
-    setSatisSayisi(satisCevap.data.length);
+    const dagilim: Record<string, number> = {};
+    for (const s of satisCevap.data) dagilim[s.odeme_turu] = (dagilim[s.odeme_turu] ?? 0) + Number(s.toplam_tutar);
+    setOdemeDagilimi(dagilim);
   }, []);
 
   useEffect(() => {
@@ -115,12 +119,6 @@ export default function AnaSayfa() {
     setYenileniyor(false);
   }
 
-  function cikisYap() {
-    Alert.alert('Çıkış yap', 'Hesaptan çıkmak istediğine emin misin?', [
-      { text: 'Vazgeç', style: 'cancel' },
-      { text: 'Çıkış yap', style: 'destructive', onPress: () => supabase.auth.signOut() },
-    ]);
-  }
 
   if (!oturumKontrolEdildi) {
     return (
@@ -135,7 +133,21 @@ export default function AnaSayfa() {
   }
 
   if (ekran === 'satis') {
-    return <SatisEkrani urunler={urunler} onSatisTamamla={satisKaydet} onGeri={() => setEkran('ana')} />;
+    return (
+      <TutarSatisEkrani
+        onGeri={() => setEkran('ana')}
+        onLezzetModu={() => setEkran('satisLezzet')}
+        onKaydedildi={verileriYukle}
+      />
+    );
+  }
+
+  if (ekran === 'ayarlar') {
+    return <AyarlarEkrani eposta={oturum.user.email} onGeri={() => setEkran('ana')} onSifirlandi={verileriYukle} />;
+  }
+
+  if (ekran === 'satisLezzet') {
+    return <SatisEkrani urunler={urunler} onSatisTamamla={satisKaydet} onGeri={() => setEkran('satis')} />;
   }
 
   if (ekran === 'giderler') {
@@ -187,7 +199,11 @@ export default function AnaSayfa() {
       <View style={styles.ozetKarti}>
         <Text style={styles.ozetEtiket}>Bugünün cirosu</Text>
         <Text style={styles.ozetDeger}>{bugununCirosu} ₺</Text>
-        <Text style={styles.ozetEtiket}>{satisSayisi} satış</Text>
+        <Text style={styles.ozetEtiket}>
+          {(['Nakit', 'Kart', 'Trendyol Yemek'] as const)
+            .map((t) => `${t === 'Trendyol Yemek' ? 'Trendyol' : t} ${Math.round(odemeDagilimi[t] ?? 0).toLocaleString('tr-TR')} ₺`)
+            .join('  ·  ')}
+        </Text>
       </View>
 
       {azalanlar.length > 0 && (
@@ -243,15 +259,15 @@ export default function AnaSayfa() {
         </View>
       </View>
 
-      <Pressable onPress={cikisYap} style={styles.cikis}>
-        <Text style={styles.cikisMetin}>Çıkış yap ({oturum.user.email})</Text>
+      <Pressable onPress={() => setEkran('ayarlar')} style={styles.cikis}>
+        <Text style={styles.cikisMetin}>⚙︎ Ayarlar · Verileri sıfırla · Çıkış</Text>
       </Pressable>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  ekran: { flex: 1, backgroundColor: RENK.krema },
+  ekran: { flex: 1, backgroundColor: 'transparent' },
   ortala: { alignItems: 'center', justifyContent: 'center' },
   icerik: { padding: 20, paddingTop: 60, paddingBottom: 60 },
   logo: { width: 170, height: 138, alignSelf: 'flex-start' },

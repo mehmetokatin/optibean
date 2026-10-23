@@ -195,7 +195,7 @@ export default function SatisEkrani({ urunler, onSatisTamamla, onGeri }: Props) 
 }
 
 const styles = StyleSheet.create({
-  ekran: { flex: 1, backgroundColor: RENK.krema },
+  ekran: { flex: 1, backgroundColor: 'transparent' },
   ust: { paddingTop: 60, paddingHorizontal: 16 },
   ustSatir: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   geri: { color: RENK.murekkepYumusak, fontSize: 16, fontWeight: '700', width: 80 },

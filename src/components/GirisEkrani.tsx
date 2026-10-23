@@ -65,7 +65,7 @@ export default function GirisEkrani() {
 }
 
 const styles = StyleSheet.create({
-  ekran: { flex: 1, backgroundColor: RENK.krema, padding: 24, justifyContent: 'center' },
+  ekran: { flex: 1, backgroundColor: 'transparent', padding: 24, justifyContent: 'center' },
   logo: { width: 200, height: 162, alignSelf: 'center' },
   baslik: { fontSize: 20, fontWeight: '900', color: RENK.murekkep, textAlign: 'center', marginBottom: 28 },
   girdi: {

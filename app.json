@@ -4,11 +4,16 @@
     "slug": "optibean",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/optibean-icon.png",
     "scheme": "optibean",
     "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/optibean-icon.png",
+      "bundleIdentifier": "com.mehmetokatin.optibean",
+      "supportsTablet": false,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -29,8 +34,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#FFF6E6",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "image": "./assets/images/optibean-splash.png",
+          "imageWidth": 200
         }
       ]
     ],
@@ -46,7 +51,7 @@
     },
     "owner": "mehmetokatin",
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "appVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/05356f72-620c-414c-b1ff-f4dd8e783fa4"
