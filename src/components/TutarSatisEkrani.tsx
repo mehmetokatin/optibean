@@ -47,6 +47,21 @@ function tutarOku(metin: string): number {
   return Number(temiz);
 }
 
+const AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+const GUNLER = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+const EN_ESKI_GUN = -365;
+
+// 0 → "Bugün", -1 → "Dün", diğerleri → "21 Ekim Salı"
+function gunAdi(gunFarki: number, uzun = false): string {
+  const d = new Date(gunAraligi(gunFarki).baslangic.getTime() + 3 * SAAT);
+  const tarih = `${d.getUTCDate()} ${AYLAR[d.getUTCMonth()]}`;
+  const tam = `${tarih} ${d.getUTCFullYear()}, ${GUNLER[d.getUTCDay()]}`;
+  if (uzun) return tam;
+  if (gunFarki === 0) return 'Bugün';
+  if (gunFarki === -1) return 'Dün';
+  return `${tarih} ${GUNLER[d.getUTCDay()]}`;
+}
+
 function para(n: number): string {
   return `${n.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ₺`;
 }
@@ -59,7 +74,7 @@ function saatYaz(tarih: string): string {
 type Props = { onGeri: () => void; onLezzetModu: () => void; onKaydedildi: () => void };
 
 export default function TutarSatisEkrani({ onGeri, onLezzetModu, onKaydedildi }: Props) {
-  const [gun, setGun] = useState<0 | -1>(0);
+  const [gun, setGun] = useState(0); // 0 = bugün, -1 = dün, -2 = önceki gün...
   const [tutarlar, setTutarlar] = useState<Record<string, string>>({});
   const [kaydediliyor, setKaydediliyor] = useState(false);
   const [kayitlar, setKayitlar] = useState<Kayit[]>([]);
@@ -114,8 +129,8 @@ export default function TutarSatisEkrani({ onGeri, onLezzetModu, onKaydedildi }:
       Alert.alert('Tutar yok', 'En az bir ödeme türüne tutar gir.');
       return;
     }
-    // Dün için girilen kayıtlar dünün 23.00'üne yazılır
-    const tarih = gun === 0 ? new Date() : new Date(gunAraligi(-1).bitis.getTime() - SAAT);
+    // Geçmiş bir gün için girilen kayıtlar o günün 23.00'üne yazılır
+    const tarih = gun === 0 ? new Date() : new Date(gunAraligi(gun).bitis.getTime() - SAAT);
     setKaydediliyor(true);
     const { error } = await supabase.from('satislar').insert(
       dolu.map((g) => ({ odeme_turu: g.tur, toplam_tutar: g.tutar, tarih_saat: tarih.toISOString() }))
@@ -165,14 +180,36 @@ export default function TutarSatisEkrani({ onGeri, onLezzetModu, onKaydedildi }:
 
         <View style={styles.gunler}>
           {[
-            { deger: 0 as const, ad: 'Bugün' },
-            { deger: -1 as const, ad: 'Dün' },
+            { deger: 0, ad: 'Bugün' },
+            { deger: -1, ad: 'Dün' },
           ].map((g) => (
             <Pressable key={g.ad} style={[styles.gun, gun === g.deger && styles.gunSecili]} onPress={() => setGun(g.deger)}>
               <Text style={[styles.gunMetin, gun === g.deger && styles.gunMetinSecili]}>{g.ad}</Text>
             </Pressable>
           ))}
         </View>
+
+        {/* Daha eski bir güne gitmek için oklar */}
+        <View style={styles.tarihSecici}>
+          <Pressable
+            style={[styles.okButon, gun <= EN_ESKI_GUN && { opacity: 0.25 }]}
+            onPress={() => setGun((g) => Math.max(EN_ESKI_GUN, g - 1))}
+            disabled={gun <= EN_ESKI_GUN}
+            hitSlop={8}
+          >
+            <Text style={styles.ok}>‹</Text>
+          </Pressable>
+          <Text style={styles.tarihMetin}>{gunAdi(gun, true)}</Text>
+          <Pressable
+            style={[styles.okButon, gun >= 0 && { opacity: 0.25 }]}
+            onPress={() => setGun((g) => Math.min(0, g + 1))}
+            disabled={gun >= 0}
+            hitSlop={8}
+          >
+            <Text style={styles.ok}>›</Text>
+          </Pressable>
+        </View>
+        {gun < 0 && <Text style={styles.gecmisUyari}>Girdiğin tutarlar {gunAdi(gun, true)} tarihine kaydedilecek.</Text>}
 
         <View style={styles.kart}>
           {ODEME_TURLERI.map((tur, i) => {
@@ -213,7 +250,7 @@ export default function TutarSatisEkrani({ onGeri, onLezzetModu, onKaydedildi }:
         </Text>
 
         <View style={styles.ozetKart}>
-          <Text style={styles.ozetEtiket}>{gun === 0 ? 'Bugünün' : 'Dünün'} toplamı</Text>
+          <Text style={styles.ozetEtiket}>{gunAdi(gun)} toplamı</Text>
           <Text style={styles.ozetDeger}>{para(gunToplami)}</Text>
           <View style={styles.ozetTurler}>
             {turToplamlari.map((t) => (
@@ -224,7 +261,7 @@ export default function TutarSatisEkrani({ onGeri, onLezzetModu, onKaydedildi }:
           </View>
         </View>
 
-        <Text style={styles.bolumBaslik}>{gun === 0 ? 'Bugün' : 'Dün'} girilenler</Text>
+        <Text style={styles.bolumBaslik}>{gunAdi(gun)} girilenler</Text>
         {yukleniyor ? (
           <ActivityIndicator color={RENK.murekkep} style={{ marginTop: 16 }} />
         ) : kayitlar.length === 0 ? (
@@ -257,6 +294,11 @@ const styles = StyleSheet.create({
   modLink: { color: RENK.murekkepYumusak, fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
   baslik: { fontSize: 30, fontWeight: '900', color: RENK.murekkep, marginBottom: 12 },
   gunler: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  tarihSecici: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  okButon: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: RENK.murekkep, backgroundColor: RENK.sut, alignItems: 'center', justifyContent: 'center' },
+  ok: { fontSize: 24, fontWeight: '900', color: RENK.murekkep, marginTop: -3 },
+  tarihMetin: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: '900', color: RENK.murekkep },
+  gecmisUyari: { backgroundColor: '#FFF1C9', borderWidth: 1.5, borderColor: '#D9A04F', borderRadius: 12, padding: 10, color: '#6B4A12', fontWeight: '700', textAlign: 'center', marginBottom: 12, overflow: 'hidden' },
   gun: { flex: 1, paddingVertical: 10, borderRadius: 999, borderWidth: 2, borderColor: RENK.murekkep, backgroundColor: RENK.sut, alignItems: 'center' },
   gunSecili: { backgroundColor: RENK.murekkep },
   gunMetin: { fontWeight: '800', color: RENK.murekkep },
