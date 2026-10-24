@@ -104,13 +104,14 @@ export default function RaporlarEkrani({ onGeri }: Props) {
     const anahtar = istanbulGun(gunTarihi.toISOString());
     const deger = satislar.filter((s) => istanbulGun(s.tarih_saat) === anahtar).reduce((t, s) => t + Number(s.toplam_tutar), 0);
     const [, ay, gun] = anahtar.split('-');
-    gunluk.push({ etiket: `${Number(gun)}.${Number(ay)}`, deger });
+    // 30 günlük görünümde sütunlar dar: sadece gün numarası sığar
+    gunluk.push({ etiket: gunSayisi > 7 ? String(Number(gun)) : `${Number(gun)}.${Number(ay)}`, deger });
   }
 
   // Saatlik yoğunluk (çalışma saatleri içinde, satış sayısı)
   const saatlik: { etiket: string; deger: number }[] = [];
   for (let saat = MAGAZA.acilisSaati; saat < MAGAZA.kapanisSaati; saat++) {
-    saatlik.push({ etiket: String(saat), deger: satislar.filter((s) => istanbulSaat(s.tarih_saat) === saat).length });
+    saatlik.push({ etiket: String(saat), deger: satislar.filter((s) => s.satis_kalemleri.length > 0 && istanbulSaat(s.tarih_saat) === saat).length });
   }
   const enYogunSaat = saatlik.reduce((en, s) => (s.deger > en.deger ? s : en), { etiket: '-', deger: 0 });
 
@@ -206,13 +207,17 @@ export default function RaporlarEkrani({ onGeri }: Props) {
             </View>
           )}
 
-          <View style={styles.kart}>
-            <Text style={styles.kartBaslik}>Saatlere göre kayıt sayısı</Text>
-            <Text style={styles.kartAlt}>
-              En yoğun saat: {enYogunSaat.deger > 0 ? `${enYogunSaat.etiket}.00 – ${Number(enYogunSaat.etiket) + 1}.00` : '-'}
-            </Text>
-            <SutunGrafik veri={saatlik} renk={RENK.pembe} etiketAraligi={2} degerGoster />
-          </View>
+          {/* Saatlik yoğunluk sadece lezzet seçerek girilen satışlarda anlamlı;
+              gün sonu toplamları ve geçmiş günler 23.00'e yazıldığı için tutarla girişte gizli */}
+          {topSayisi > 0 && (
+            <View style={styles.kart}>
+              <Text style={styles.kartBaslik}>Saatlere göre satış sayısı</Text>
+              <Text style={styles.kartAlt}>
+                En yoğun saat: {enYogunSaat.deger > 0 ? `${enYogunSaat.etiket}.00 – ${Number(enYogunSaat.etiket) + 1}.00` : '-'}
+              </Text>
+              <SutunGrafik veri={saatlik} renk={RENK.pembe} etiketAraligi={2} degerGoster />
+            </View>
+          )}
 
           {lezzetler.length > 0 && (
           <View style={styles.kart}>

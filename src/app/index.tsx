@@ -26,7 +26,7 @@ import { supabase } from '../lib/supabase';
 const moduller = [
   { baslik: 'Satış', aciklama: 'Nakit, kart ve Trendyol tutarı gir' },
   { baslik: 'Ürünler', aciklama: 'Menü ve fiyatlar' },
-  { baslik: 'Stok', aciklama: 'Malzeme takibi' },
+  { baslik: 'Stok', aciklama: 'Kutu takibi ve üretim' },
   { baslik: 'Giderler', aciklama: 'Kira, fatura, alımlar' },
   { baslik: 'Raporlar', aciklama: 'Ciro ve kâr' },
   { baslik: 'Kampanyalar', aciklama: 'İndirim ve duyurular' },
